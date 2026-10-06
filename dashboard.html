@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BTCUSDT 永續 · KDJ 訊號研究儀表板</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg:#F3F5F8; --panel:#FFFFFF; --line:#DDE3EB; --text:#15202B; --muted:#6B7A8C;
+    --up:#1FA67A; --down:#E04E5A; --accent:#2F6BFF; --grid:#E9EDF2; --chip:#EAF0F8;
+    --k5:#2F6BFF; --k15:#F2994A; --warn:#C77700; --ok:#1FA67A;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#141A24; --panel:#1B2330; --line:#2A3444; --text:#E6EBF2; --muted:#8A96A8;
+    --up:#3DD598; --down:#FF6B72; --accent:#6C9CFF; --grid:#222C3A; --chip:#243042; --k5:#7FA7FF; --k15:#F7B267; --warn:#F2B84B; --ok:#3DD598; } }
+  :root[data-theme="dark"] {
+    --bg:#141A24; --panel:#1B2330; --line:#2A3444; --text:#E6EBF2; --muted:#8A96A8;
+    --up:#3DD598; --down:#FF6B72; --accent:#6C9CFF; --grid:#222C3A; --chip:#243042; --k5:#7FA7FF; --k15:#F7B267; --warn:#F2B84B; --ok:#3DD598; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:"IBM Plex Sans",-apple-system,"Segoe UI","Noto Sans TC",sans-serif; font-feature-settings:"tnum" 1; font-size:14px; line-height:1.5;
+         padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px); }
+  header { background:var(--panel); border-bottom:1px solid var(--line); padding:14px 20px; display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; }
+  header h1 { font-size:17px; font-weight:600; margin:0 8px 0 0; }
+  header h1 span { color:var(--muted); font-weight:400; }
+  .ctl { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; }
+  .ctl input, .ctl select { font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  .ctl input[type=number] { width:64px; } .ctl input[type=date] { width:140px; }
+  .ctl input:focus, .ctl select:focus, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  button.primary { font:inherit; font-weight:600; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:7px 16px; cursor:pointer; }
+  button.primary[disabled] { opacity:.5; cursor:default; }
+  button.ghost { font:inherit; background:transparent; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer; }
+  .right { margin-left:auto; display:flex; gap:8px; align-items:center; }
+
+  .wrap { padding:16px 20px 28px; display:grid; gap:16px; max-width:1500px; margin:0 auto; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+  .stat .l { color:var(--muted); font-size:12px; margin-bottom:4px; }
+  .stat .v { font-size:26px; font-weight:600; line-height:1.1; }
+  .stat .v.sm { font-size:15px; font-weight:500; }
+  .stat .v.long { color:var(--up); } .stat .v.short { color:var(--down); }
+  h2 { font-size:13px; font-weight:600; color:var(--muted); margin:0 0 10px; }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:900px) { .two { grid-template-columns:1fr; } }
+  .checks { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:13px; }
+  .checks .k { color:var(--muted); }
+  .badge { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; font-weight:500; background:var(--chip); }
+  .badge.ok { color:var(--ok); } .badge.warn { color:var(--warn); } .badge.bad { color:var(--down); }
+  .gaps { margin:6px 0 0; padding-left:18px; color:var(--muted); font-size:12px; }
+  .log { font-size:12px; color:var(--muted); white-space:pre-wrap; margin:0; max-height:200px; overflow:auto; }
+  .log b { color:var(--text); font-weight:500; }
+
+  .charts { position:relative; }
+  #price { height:380px; } #ind { height:200px; border-top:1px solid var(--line); }
+  .chartbox { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .legend { display:flex; gap:16px; padding:8px 14px 0; font-size:12px; color:var(--muted); }
+  .legend i { display:inline-block; width:10px; height:2px; vertical-align:middle; margin-right:6px; }
+  .empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); text-align:center; padding:24px; }
+  .empty p { margin:0; max-width:34em; }
+
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:right; padding:7px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; position:sticky; top:0; background:var(--panel); }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align:left; }
+  tbody tr { cursor:pointer; } tbody tr:hover { background:var(--chip); }
+  td.long { color:var(--up); font-weight:600; } td.short { color:var(--down); font-weight:600; }
+  .tablebox { max-height:420px; overflow:auto; }
+  .note { font-size:12px; color:var(--muted); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
+  .dot.live { background:var(--ok); box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .dot.err { background:var(--down); }
+  .preview { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px 18px; font-size:13px; }
+  .preview .l { color:var(--muted); font-size:12px; } .preview .v { font-size:18px; font-weight:600; }
+  .preview .v.near { color:var(--warn); }
+  @keyframes flash { from { background:color-mix(in srgb, var(--accent) 30%, transparent); } to { background:transparent; } }
+  tr.new { animation: flash 3s ease-out; }
+</style>
+</head>
+<body>
+<header>
+  <h1>BTCUSDT 永續 <span>KDJ(9,3,3) 雙週期訊號 · 第一階段</span></h1>
+  <label class="ctl">區間 <input type="date" id="start" value="2026-10-01"> ～ <input type="date" id="end" value="2026-10-06"></label>
+  <label class="ctl">門檻 <input type="number" id="lo" value="15" min="1" max="49"> / <input type="number" id="hi" value="85" min="51" max="99"></label>
+  <label class="ctl">Warm-up <input type="number" id="warm" value="500" min="50" step="50"> 根</label>
+  <label class="ctl">來源
+    <select id="src">
+      <option value="fapi">Binance Futures REST（瀏覽器直連）</option>
+      <option value="file">載入 run.py 輸出的 CSV</option>
+    </select>
+  </label>
+  <input type="file" id="files" accept=".csv" multiple hidden>
+  <div class="right">
+    <label class="ctl"><input type="checkbox" id="live" checked> 即時更新</label>
+    <span class="ctl" id="wsStatus"><span class="dot" id="wsDot"></span><span id="wsText">未連線</span></span>
+    <button class="ghost" id="themeBtn" type="button">切換主題</button>
+    <button class="primary" id="run" type="button">執行</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid">
+    <div class="card stat"><div class="l">總有效訊號</div><div class="v" id="sTotal">—</div></div>
+    <div class="card stat"><div class="l">Long</div><div class="v long" id="sLong">—</div></div>
+    <div class="card stat"><div class="l">Short</div><div class="v short" id="sShort">—</div></div>
+    <div class="card stat"><div class="l">5m K 棒</div><div class="v" id="sB5">—</div></div>
+    <div class="card stat"><div class="l">15m K 棒</div><div class="v" id="sB15">—</div></div>
+    <div class="card stat"><div class="l">統計區間（UTC+8）</div><div class="v sm" id="sRange">—</div></div>
+    <div class="card stat"><div class="l">Warm-up 起點（UTC+8）</div><div class="v sm" id="sWarm">—</div></div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h2>資料驗證</h2>
+      <div class="checks" id="checks"><span class="k">尚未執行</span><span></span></div>
+    </div>
+    <div class="card">
+      <h2>執行紀錄（資料來源嘗試 / 步驟）</h2>
+      <pre class="log" id="log">尚未執行。按「執行」後會依序：確認合約 → 下載 5m/15m → 驗證 → KDJ → 對齊 → 去重。</pre>
+    </div>
+  </div>
+
+  <div class="card" id="previewCard" hidden>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <h2 style="margin:0">即時狀態</h2>
+      <span class="note">下方 K 值由「尚未收盤」的 K 棒暫算，只供觀察；訊號一律在 5m 收盤後才判定</span>
+    </div>
+    <div class="preview">
+      <div><div class="l">最新價</div><div class="v" id="pvPrice">—</div></div>
+      <div><div class="l">5m 收盤倒數</div><div class="v" id="pvCountdown">—</div></div>
+      <div><div class="l">暫算 5m K</div><div class="v" id="pvK5">—</div></div>
+      <div><div class="l">暫算 15m K</div><div class="v" id="pvK15">—</div></div>
+      <div><div class="l">上一根已收盤 15m K</div><div class="v" id="pvK15c">—</div></div>
+      <div><div class="l">目前狀態</div><div class="v" id="pvState">—</div></div>
+      <div><div class="l">最後更新（UTC+8）</div><div class="v" id="pvUpdated" style="font-size:14px;font-weight:500">—</div></div>
+    </div>
+  </div>
+
+  <div class="chartbox charts">
+    <div class="legend"><span><i style="background:var(--up)"></i>5m K 線 · 訊號標記</span><span style="margin-left:auto">時間軸：UTC+8</span></div>
+    <div id="price"></div>
+    <div class="legend"><span><i style="background:var(--k5)"></i>5m K</span><span><i style="background:var(--k15)"></i>15m K（策略當下可見的已收盤 15m）</span><span><i style="background:var(--muted)"></i>門檻</span></div>
+    <div id="ind"></div>
+    <div class="empty" id="empty"><p>尚未載入資料。執行後這裡會顯示真實 K 線、K 值與每一筆去重後的訊號。</p></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <h2 style="margin:0">Signal dataset</h2>
+      <span class="note" id="tableNote">訊號時間 = 條件成立的 5m K 棒收盤時刻；價格 = 該棒收盤價</span>
+      <button class="ghost" id="csv" type="button" style="margin-left:auto" disabled>匯出 CSV</button>
+    </div>
+    <div class="tablebox">
+      <table><thead><tr><th>#</th><th>Time (UTC+8)</th><th>Direction</th><th>BTC Price</th><th>15m K</th><th>5m K</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="6" style="text-align:center;color:var(--muted)">尚未執行</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>// Strategy Engine (JS) — mirrors kdj_backtest/kdj.py + signal_engine.py exactly.
+// Shared by the dashboard (browser) and the parity test (node).
+(function (root) {
+  const LONG = "LONG", SHORT = "SHORT", FLAT = null;
+
+  function rma(xs, n) {
+    const out = new Array(xs.length).fill(NaN); let prev = NaN;
+    for (let i = 0; i < xs.length; i++) {
+      const v = xs[i]; if (Number.isNaN(v)) continue;
+      prev = Number.isNaN(prev) ? v : prev + (v - prev) / n; out[i] = prev;
+    }
+    return out;
+  }
+
+  // bars: [{open_time, close_time, open, high, low, close, volume}] sorted by open_time
+  function kdj(bars, n = 9, kN = 3, dN = 3) {
+    const rsv = new Array(bars.length).fill(NaN);
+    for (let i = n - 1; i < bars.length; i++) {
+      let hh = -Infinity, ll = Infinity;
+      for (let j = i - n + 1; j <= i; j++) { if (bars[j].high > hh) hh = bars[j].high; if (bars[j].low < ll) ll = bars[j].low; }
+      const rng = hh - ll;
+      rsv[i] = rng === 0 ? 50 : (bars[i].close - ll) / rng * 100;
+    }
+    const K = rma(rsv, kN), D = rma(K, dN);
+    return bars.map((b, i) => ({ ...b, rsv: rsv[i], K: K[i], D: D[i], J: 3 * K[i] - 2 * D[i] }));
+  }
+
+  // For each 5m bar, attach K of the latest 15m bar whose close_time <= 5m close_time (no look-ahead).
+  function align15to5(b5, b15) {
+    let j = -1; const out = [];
+    for (const b of b5) {
+      while (j + 1 < b15.length && b15[j + 1].close_time <= b.close_time) j++;
+      out.push({ ...b, K5: b.K, K15: j >= 0 ? b15[j].K : NaN, ct15: j >= 0 ? b15[j].close_time : NaN });
+    }
+    return out;
+  }
+
+  function rawCondition(r, lo, hi) {
+    if (r.K15 < lo && r.K5 < lo) return LONG;
+    if (r.K15 > hi && r.K5 > hi) return SHORT;
+    return FLAT;
+  }
+
+  // False->True transition per direction; SHORT->LONG switch starts a new episode.
+  function dedupSignals(rows, startMs, lo = 15, hi = 85) {
+    const sig = []; let prev = FLAT;
+    for (const r of rows) {
+      if (Number.isNaN(r.K5) || Number.isNaN(r.K15)) { prev = FLAT; continue; }
+      const cond = rawCondition(r, lo, hi);
+      if (cond !== FLAT && cond !== prev && r.open_time >= startMs)
+        sig.push({ open_time: r.open_time, close_time: r.close_time, direction: cond, price: r.close, K15: r.K15, K5: r.K5 });
+      prev = cond;
+    }
+    return sig;
+  }
+
+  function validate(bars, stepMs, nowMs) {
+    const gaps = []; let dups = 0, aligned = true, ctOk = true; const seen = new Set();
+    for (let i = 0; i < bars.length; i++) {
+      const b = bars[i];
+      if (seen.has(b.open_time)) dups++; seen.add(b.open_time);
+      if (b.open_time % stepMs !== 0) aligned = false;
+      if (b.close_time - b.open_time !== stepMs - 1) ctOk = false;
+      if (i > 0) { const d = b.open_time - bars[i - 1].open_time; if (d !== stepMs) gaps.push({ from: bars[i - 1].open_time, to: b.open_time, missing: Math.round(d / stepMs) - 1 }); }
+    }
+    return { bars: bars.length, duplicates: dups, gaps, continuous: gaps.length === 0,
+             unclosed: bars.filter(b => b.close_time >= nowMs).length, open_time_aligned: aligned, close_time_consistent: ctOk };
+  }
+
+  root.Strategy = { rma, kdj, align15to5, rawCondition, dedupSignals, validate, LONG, SHORT };
+})(typeof module !== "undefined" ? module.exports : window);
+</script>
+<script>
+(() => {
+  const S = window.Strategy;
+  const $ = id => document.getElementById(id);
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const STEP = { "5m": 300000, "15m": 900000 };
+  const TZ = 8 * 3600 * 1000;
+  const fmtTW = ms => new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(ms)).replace(/\//g, "-");
+  const fmtP = p => p.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  let last = null; // last run result
+
+  const log = (msg, strong) => { const el = $("log"); if (el.dataset.fresh !== "1") { el.textContent = ""; el.dataset.fresh = "1"; } el.innerHTML += (strong ? `<b>${msg}</b>` : msg) + "\n"; el.scrollTop = el.scrollHeight; };
+
+  // ---------------- charts (two instances, synced)
+  const common = () => ({ layout: { background: { color: "transparent" }, textColor: css("--muted"), fontFamily: "IBM Plex Sans, sans-serif" },
+    grid: { vertLines: { color: css("--grid") }, horzLines: { color: css("--grid") } }, rightPriceScale: { borderColor: css("--line") },
+    timeScale: { borderColor: css("--line"), timeVisible: true, secondsVisible: false }, crosshair: { mode: LightweightCharts.CrosshairMode.Normal } });
+  const chartP = LightweightCharts.createChart($("price"), { autoSize: true, ...common() });
+  const chartI = LightweightCharts.createChart($("ind"), { autoSize: true, ...common() });
+  const candles = chartP.addCandlestickSeries({ upColor: css("--up"), downColor: css("--down"), borderVisible: false, wickUpColor: css("--up"), wickDownColor: css("--down") });
+  const k5s = chartI.addLineSeries({ color: css("--k5"), lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+  const k15s = chartI.addLineSeries({ color: css("--k15"), lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: false });
+  chartI.priceScale("right").applyOptions({ autoScale: false }); k5s.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
+  let loLine = null, hiLine = null;
+  let syncing = false;
+  const sync = (a, b) => a.timeScale().subscribeVisibleLogicalRangeChange(r => { if (syncing || !r) return; syncing = true; b.timeScale().setVisibleLogicalRange(r); syncing = false; });
+  sync(chartP, chartI); sync(chartI, chartP);
+  const tsec = ms => Math.floor((ms + TZ) / 1000); // shift so the chart axis reads as UTC+8
+
+  function applyTheme() {
+    [chartP, chartI].forEach(c => c.applyOptions(common()));
+    candles.applyOptions({ upColor: css("--up"), downColor: css("--down"), wickUpColor: css("--up"), wickDownColor: css("--down") });
+    k5s.applyOptions({ color: css("--k5") }); k15s.applyOptions({ color: css("--k15") });
+    if (last) drawMarkers(last);
+  }
+  $("themeBtn").onclick = () => { const r = document.documentElement; const dark = matchMedia("(prefers-color-scheme: dark)").matches; const cur = r.dataset.theme || (dark ? "dark" : "light"); r.dataset.theme = cur === "dark" ? "light" : "dark"; applyTheme(); };
+
+  function drawMarkers(res) {
+    candles.setMarkers(res.signals.map((s, i) => ({ time: tsec(s.open_time), position: s.direction === "LONG" ? "belowBar" : "aboveBar",
+      color: s.direction === "LONG" ? css("--up") : css("--down"), shape: s.direction === "LONG" ? "arrowUp" : "arrowDown", text: `${i + 1}` })));
+  }
+
+  // ---------------- data sources (browser)
+  async function getJSON(url) {
+    const r = await fetch(url); if (!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 120)}`); return r.json();
+  }
+  async function fetchFapi(interval, startMs, endMs, nowMs) {
+    const out = []; let cur = startMs; const step = STEP[interval];
+    while (cur <= endMs) {
+      const rows = await getJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=${interval}&startTime=${cur}&endTime=${endMs}&limit=1500`);
+      if (!rows.length) break;
+      for (const k of rows) if (+k[6] < nowMs) out.push({ open_time: +k[0], close_time: +k[6], open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] });
+      cur = +rows[rows.length - 1][0] + step; if (rows.length < 1500) break;
+    }
+    return out;
+  }
+  async function verifyContract() {
+    const info = await getJSON("https://fapi.binance.com/fapi/v1/exchangeInfo");
+    const s = info.symbols.find(x => x.symbol === "BTCUSDT"); if (!s) throw new Error("BTCUSDT 不在 futures exchangeInfo");
+    return { contractType: s.contractType, quoteAsset: s.quoteAsset, status: s.status };
+  }
+  function parseCSV(text) {
+    const [h, ...lines] = text.trim().split(/\r?\n/); const cols = h.split(",");
+    return lines.map(l => { const v = l.split(","); const o = {}; cols.forEach((c, i) => o[c] = +v[i]); return o; }).sort((a, b) => a.open_time - b.open_time);
+  }
+  function pickFiles() { return new Promise(res => { $("files").onchange = () => res([...$("files").files]); $("files").value = ""; $("files").click(); }); }
+
+  // ---------------- pipeline
+  async function run() {
+    const btn = $("run"); btn.disabled = true; $("log").dataset.fresh = "0"; closeWs(); last = null; forming = { "5m": null, "15m": null };
+    try {
+      const lo = +$("lo").value, hi = +$("hi").value, warm = +$("warm").value;
+      const startMs = Date.parse($("start").value + "T00:00:00+08:00");
+      const nowMs = Date.now();
+      let endMs = Math.min(Date.parse($("end").value + "T23:59:59.999+08:00"), nowMs);
+      if (!(startMs < endMs)) throw new Error("區間無效");
+      let bars = {}, contract, sourceName;
+
+      if ($("src").value === "fapi") {
+        sourceName = "Binance USDⓈ-M Futures REST (fapi.binance.com)";
+        log("[A] 連線 fapi.binance.com，確認合約類型…");
+        contract = await verifyContract();
+        log(`    contractType=${contract.contractType} quote=${contract.quoteAsset} status=${contract.status}`);
+        for (const iv of ["5m", "15m"]) {
+          const from = startMs - warm * STEP[iv];
+          log(`[A] 下載 ${iv}：${fmtTW(from)} → ${fmtTW(endMs)}（含 warm-up ${warm} 根）`);
+          bars[iv] = await fetchFapi(iv, from, endMs, nowMs);
+          log(`    取得 ${bars[iv].length} 根已收盤 K`);
+          if (!bars[iv].length) throw new Error(`${iv} 回傳為空`);
+        }
+      } else {
+        sourceName = "run.py 輸出 CSV（data/BTCUSDT_5m.csv, BTCUSDT_15m.csv）";
+        log("請選擇 run.py 產生的 BTCUSDT_5m.csv 與 BTCUSDT_15m.csv");
+        const files = await pickFiles();
+        for (const f of files) { const iv = /_15m/.test(f.name) ? "15m" : /_5m/.test(f.name) ? "5m" : null; if (iv) { bars[iv] = parseCSV(await f.text()); log(`    ${f.name} → ${bars[iv].length} 根`); } }
+        if (!bars["5m"] || !bars["15m"]) throw new Error("需要同時載入 5m 與 15m 的 CSV");
+        contract = { contractType: "依 run.py 驗證（exchangeInfo）", quoteAsset: "USDT", status: "—" };
+      }
+
+      log("驗證資料品質…");
+      const checks = {}; for (const iv of ["5m", "15m"]) checks[iv] = S.validate(bars[iv], STEP[iv], nowMs);
+      log("計算 KDJ(9,3,3)，RMA 平滑，只取 K…");
+      const k5 = S.kdj(bars["5m"]), k15 = S.kdj(bars["15m"]);
+      log("對齊 5m ↔ 最新已收盤 15m，套用門檻並做 episode 去重…");
+      const aligned = S.align15to5(k5, k15);
+      const signals = S.dedupSignals(aligned, startMs, lo, hi);
+      last = { sourceName, contract, checks, bars, k5, k15, aligned, signals, startMs, endMs, warm, lo, hi };
+      render(last);
+      connectWs();
+      log(`完成：${signals.length} 筆有效訊號（Long ${signals.filter(s => s.direction === "LONG").length} / Short ${signals.filter(s => s.direction === "SHORT").length}）`, true);
+    } catch (e) {
+      log(`[FAIL] ${e.message}`, true);
+      log($("src").value === "fapi" ? "若是 CORS / 網路或地區限制：可先在本機跑 run.py，再把來源切成「載入 CSV」。" : "請確認檔名含 _5m / _15m 且欄位為 open_time,close_time,open,high,low,close,volume。");
+      log("本次未成功執行，未產生任何訊號。", true);
+    } finally { btn.disabled = false; }
+  }
+
+  function render(r) {
+    const n = r.signals.length, nl = r.signals.filter(s => s.direction === "LONG").length;
+    $("sTotal").textContent = n; $("sLong").textContent = nl; $("sShort").textContent = n - nl;
+    $("sB5").textContent = r.bars["5m"].length; $("sB15").textContent = r.bars["15m"].length;
+    $("sRange").textContent = `${fmtTW(r.startMs)} ～ ${fmtTW(r.bars["5m"].at(-1).close_time + 1)}`;
+    $("sWarm").textContent = `5m ${fmtTW(r.bars["5m"][0].open_time)} · 15m ${fmtTW(r.bars["15m"][0].open_time)}`;
+
+    const b = (ok, text, warn) => `<span class="badge ${ok ? "ok" : warn ? "warn" : "bad"}">${text}</span>`;
+    const c5 = r.checks["5m"], c15 = r.checks["15m"];
+    const perIv = (c) => `${b(c.unclosed === 0, c.unclosed === 0 ? "僅已收盤" : `${c.unclosed} 根未收盤`)} ${b(c.gaps.length === 0, c.gaps.length === 0 ? "無缺 K" : `${c.gaps.length} 處缺口`, true)} ${b(c.duplicates === 0, c.duplicates === 0 ? "無重複" : `${c.duplicates} 重複`)} ${b(c.open_time_aligned && c.close_time_consistent, "時間戳對齊")}`;
+    const gaps = [...c5.gaps.map(g => `5m：${fmtTW(g.from)} → ${fmtTW(g.to)}（缺 ${g.missing} 根）`), ...c15.gaps.map(g => `15m：${fmtTW(g.from)} → ${fmtTW(g.to)}（缺 ${g.missing} 根）`)];
+    $("checks").innerHTML = `<span class="k">來源</span><span>${r.sourceName}</span>
+      <span class="k">市場</span><span>BTCUSDT · ${b(/PERPETUAL/.test(r.contract.contractType) || /run\.py/.test(r.contract.contractType), r.contract.contractType)} · ${r.contract.quoteAsset}-M Futures（非現貨）</span>
+      <span class="k">5m</span><span>${perIv(c5)}</span><span class="k">15m</span><span>${perIv(c15)}</span>
+      <span class="k">門檻 / 去重</span><span>Long K&lt;${r.lo}，Short K&gt;${r.hi}，兩週期同時成立；False→True 轉換計一次</span>
+      ${gaps.length ? `<span class="k">缺口明細</span><ul class="gaps">${gaps.map(g => `<li>${g}</li>`).join("")}</ul>` : ""}`;
+
+    $("empty").style.display = "none";
+    candles.setData(r.k5.map(x => ({ time: tsec(x.open_time), open: x.open, high: x.high, low: x.low, close: x.close })));
+    k5s.setData(r.aligned.filter(x => !Number.isNaN(x.K5)).map(x => ({ time: tsec(x.open_time), value: x.K5 })));
+    k15s.setData(r.aligned.filter(x => !Number.isNaN(x.K15)).map(x => ({ time: tsec(x.open_time), value: x.K15 })));
+    if (loLine) k5s.removePriceLine(loLine); if (hiLine) k5s.removePriceLine(hiLine);
+    loLine = k5s.createPriceLine({ price: r.lo, color: css("--muted"), lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "" });
+    hiLine = k5s.createPriceLine({ price: r.hi, color: css("--muted"), lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "" });
+    drawMarkers(r);
+    chartP.timeScale().setVisibleRange({ from: tsec(r.startMs), to: tsec(r.endMs) });
+
+    $("rows").innerHTML = r.signals.length ? r.signals.map((s, i) => `<tr data-t="${s.open_time}"><td>${i + 1}</td><td>${fmtTW(s.close_time + 1)}</td><td class="${s.direction.toLowerCase()}">${s.direction}</td><td>${fmtP(s.price)}</td><td>${s.K15.toFixed(2)}</td><td>${s.K5.toFixed(2)}</td></tr>`).join("")
+      : `<tr><td colspan="6" style="text-align:center;color:var(--muted)">此區間內沒有同時滿足雙週期門檻的訊號</td></tr>`;
+    [...$("rows").querySelectorAll("tr[data-t]")].forEach(tr => tr.onclick = () => { const t = tsec(+tr.dataset.t); chartP.timeScale().setVisibleRange({ from: t - 3600 * 6, to: t + 3600 * 6 }); });
+    $("csv").disabled = !r.signals.length;
+  }
+
+
+  // ---------------- Live WebSocket -> same DataEngine/Strategy path as REST
+  const WS_URL = "wss://fstream.binance.com/market/stream?streams=btcusdt@kline_5m/btcusdt@kline_15m"; // kline = /market route (legacy /stream retired 2026-04-23)
+  let ws = null, wsTimer = null, wsWatch = null, gotMsg = false, forming = { "5m": null, "15m": null }, knownSig = new Set(), cdTimer = null;
+  const setWs = (cls, txt) => { $("wsDot").className = "dot " + cls; $("wsText").textContent = txt; };
+
+  function closeWs() { if (ws) { ws.onclose = null; ws.close(); ws = null; } clearTimeout(wsTimer); clearTimeout(wsWatch); clearInterval(cdTimer); setWs("", "未連線"); }
+
+  function connectWs() {
+    if (!last || $("src").value !== "fapi" || !$("live").checked) return;
+    closeWs(); setWs("", "連線中…");
+    knownSig = new Set(last.signals.map(s => s.open_time + s.direction));
+    ws = new WebSocket(WS_URL);
+    gotMsg = false;
+    ws.onopen = () => { setWs("", "已連線，等待資料…"); log("[WS] 已連線 " + WS_URL.split("?")[0] + "（只在 K 棒收盤 k.x=true 時進入策略）"); $("previewCard").hidden = false;
+      cdTimer = setInterval(countdown, 1000);
+      wsWatch = setTimeout(() => { if (!gotMsg) { setWs("err", "已連線但沒有收到資料"); log("[WS] 8 秒內沒有收到任何 K 線推送。可能是端點變更或被網路擋下，請查看瀏覽器 Console / Network。", true); } }, 8000); };
+    ws.onmessage = ev => {
+      let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+      const k = msg && msg.data && msg.data.k; if (!k) { if (msg && msg.error) log("[WS] 伺服器回覆錯誤：" + JSON.stringify(msg.error)); return; }
+      if (!gotMsg) { gotMsg = true; clearTimeout(wsWatch); setWs("live", "即時更新中"); }
+      onLiveKline(k); };
+    ws.onclose = () => { setWs("err", "連線中斷，5 秒後重試"); wsTimer = setTimeout(() => { if ($("live").checked) { backfill().then(connectWs); } }, 5000); };
+    ws.onerror = () => ws.close();
+  }
+
+  function toBar(k) { return { open_time: +k.t, close_time: +k.T, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v }; }
+
+  async function backfill() {
+    // after a disconnect, fill any closed bars we missed via REST so the series stays continuous
+    if (!last) return; const nowMs = Date.now();
+    for (const iv of ["5m", "15m"]) {
+      const lastBar = last.bars[iv].at(-1); const from = lastBar.open_time + STEP[iv];
+      if (from + STEP[iv] - 1 >= nowMs) continue;
+      try { const got = await fetchFapi(iv, from, nowMs, nowMs); if (got.length) { got.forEach(b => upsert(iv, b)); log(`[WS] 斷線補抓 ${iv} ${got.length} 根`); } }
+      catch (e) { log(`[WS] 補抓 ${iv} 失敗：${e.message}`); }
+    }
+    recompute();
+  }
+
+  function upsert(iv, bar) {
+    const arr = last.bars[iv]; const i = arr.findIndex(b => b.open_time === bar.open_time);
+    if (i >= 0) arr[i] = bar; else if (bar.open_time > arr.at(-1).open_time) arr.push(bar); else return false;
+    return true;
+  }
+
+  function onLiveKline(k) {
+    const iv = k.i, bar = toBar(k);
+    forming[iv] = bar;
+    candles.update({ time: tsec(bar.open_time), open: bar.open, high: bar.high, low: bar.low, close: bar.close }); // display only
+    if (k.x) {
+      const prev = last.bars[iv].at(-1);
+      if (bar.open_time > prev.open_time + STEP[iv]) { log(`[WS] 偵測到 ${iv} 缺口，REST 補抓…`); backfill(); return; }
+      if (upsert(iv, bar)) { forming[iv] = null; recompute(); log(`[WS] ${iv} 收盤 ${fmtTW(bar.close_time + 1)} close=${fmtP(bar.close)}`); }
+    } else { preview(); }
+  }
+
+  function recompute() {
+    const r = last; const nowMs = Date.now();
+    for (const iv of ["5m", "15m"]) r.checks[iv] = S.validate(r.bars[iv], STEP[iv], nowMs);
+    r.k5 = S.kdj(r.bars["5m"]); r.k15 = S.kdj(r.bars["15m"]);
+    r.aligned = S.align15to5(r.k5, r.k15);
+    r.signals = S.dedupSignals(r.aligned, r.startMs, r.lo, r.hi);
+    r.endMs = r.bars["5m"].at(-1).close_time;
+    const range = chartP.timeScale().getVisibleLogicalRange();
+    render(r);
+    if (range) chartP.timeScale().setVisibleLogicalRange(range);
+    for (const s of r.signals) { const key = s.open_time + s.direction; if (!knownSig.has(key)) { knownSig.add(key);
+      log(`[SIGNAL] ${fmtTW(s.close_time + 1)} ${s.direction} @ ${fmtP(s.price)}  K15=${s.K15.toFixed(2)} K5=${s.K5.toFixed(2)}`, true);
+      const tr = $("rows").querySelector(`tr[data-t="${s.open_time}"]`); if (tr) { tr.classList.add("new"); tr.scrollIntoView({ block: "nearest" }); } } }
+    preview();
+  }
+
+  function preview() {
+    if (!last) return; const f5 = forming["5m"], f15 = forming["15m"];
+    const lastPrice = (f5 || last.bars["5m"].at(-1)).close;
+    $("pvPrice").textContent = fmtP(lastPrice);
+    const pk = (iv, f) => { if (!f) return NaN; const arr = last.bars[iv].concat([f]); return S.kdj(arr).at(-1).K; };
+    const k5p = pk("5m", f5), k15p = pk("15m", f15), k15c = last.k15.at(-1).K;
+    const near = v => (v < last.lo || v > last.hi) ? "v near" : "v";
+    $("pvK5").textContent = Number.isNaN(k5p) ? "—" : k5p.toFixed(2); $("pvK5").className = near(k5p);
+    $("pvK15").textContent = Number.isNaN(k15p) ? "—" : k15p.toFixed(2); $("pvK15").className = near(k15p);
+    $("pvK15c").textContent = k15c.toFixed(2); $("pvK15c").className = near(k15c);
+    const a = last.aligned.at(-1); const cond = S.rawCondition(a, last.lo, last.hi);
+    $("pvState").textContent = cond ? `${cond} episode 進行中` : "無條件成立";
+    $("pvUpdated").textContent = fmtTW(Date.now()) + ":" + String(new Date().getSeconds()).padStart(2, "0");
+  }
+  function countdown() {
+    const now = Date.now(), nextClose = Math.ceil((now + 1) / STEP["5m"]) * STEP["5m"]; const s = Math.max(0, Math.floor((nextClose - now) / 1000));
+    $("pvCountdown").textContent = `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }
+  $("live").onchange = () => $("live").checked ? connectWs() : closeWs();
+  $("src").onchange = () => { closeWs(); $("live").disabled = $("src").value !== "fapi"; };
+
+  $("csv").onclick = () => {
+    if (!last) return;
+    const lines = ["time_utc8,direction,price,K15,K5,open_time_ms,close_time_ms", ...last.signals.map(s => `${fmtTW(s.close_time + 1)},${s.direction},${s.price},${s.K15.toFixed(4)},${s.K5.toFixed(4)},${s.open_time},${s.close_time}`)];
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" })); a.download = `signals_${$("start").value}_${$("end").value}.csv`; a.click();
+  };
+  $("run").onclick = run;
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+})();
+</script>
+</body>
+</html>
